@@ -1,823 +1,810 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { initializeApp } from 'firebase/app';
-import { 
-    getAuth, 
-    createUserWithEmailAndPassword, 
-    signInWithEmailAndPassword, 
-    onAuthStateChanged, 
-    signOut,
-    signInAnonymously,
-    signInWithCustomToken
-} from 'firebase/auth';
-import { 
-    getFirestore, 
-    collection, 
-    addDoc, 
-    doc, 
-    setDoc, 
-    getDoc, 
-    getDocs, 
-    updateDoc, 
-    deleteDoc, 
-    query, 
-    where, 
-    onSnapshot,
-    serverTimestamp,
-    arrayUnion,
-    arrayRemove
-} from 'firebase/firestore';
-import { setLogLevel } from 'firebase/firestore';
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Platform Kuis Interaktif</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        /* Custom styles */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .page {
+            display: none; /* Sembunyikan semua halaman secara default */
+        }
+        .page.active {
+            display: block; /* Tampilkan hanya halaman yang aktif */
+        }
+        /* Animasi sederhana untuk transisi halaman */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .page.active {
+            animation: fadeIn 0.3s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
 
-// --- SVG Icons ---
-const TrashIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" />
-    </svg>
-);
-const EditIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-        <path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" />
-        <path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" />
-    </svg>
-);
-const PlusIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-    </svg>
-);
-const PlayIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-    </svg>
-);
+    <!-- ===== Navbar ===== -->
+    <nav class="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex-shrink-0">
+                    <span id="nav-brand" class="text-2xl font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
+                       Kuis Interaktif
+                    </span>
+                </div>
+                <div id="nav-links" class="flex items-center">
+                    <!-- Tautan akan diisi oleh JavaScript -->
+                </div>
+            </div>
+        </div>
+    </nav>
 
-// --- Firebase Initialization ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    <!-- ===== Kontainer Utama Aplikasi ===== -->
+    <main class="p-4 sm:p-6 md:p-8">
 
-let app;
-let auth;
-let db;
+        <!-- ===== Halaman 1: Layar Utama (Gabung & Login) ===== -->
+        <div id="page-home" class="page active">
+            <div class="flex flex-col md:flex-row items-start justify-center gap-8 md:gap-16">
+                <!-- Kolom Gabung Kuis -->
+                <div class="w-full md:w-1/2 p-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg">
+                    <h2 class="text-3xl font-bold text-center mb-4 text-indigo-600 dark:text-indigo-400">Gabung Kuis</h2>
+                    <p class="text-center text-gray-600 dark:text-gray-400 mb-6">Masukkan kode permainan untuk mulai.</p>
+                    <form id="join-form" class="space-y-4">
+                        <input type="text" id="join-code-input" placeholder="Kode Permainan" class="w-full px-4 py-3 border rounded-lg dark:bg-gray-700 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-lg">
+                        <input type="text" id="join-name-input" placeholder="Nama Panggilan" class="w-full px-4 py-3 border rounded-lg dark:bg-gray-700 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-lg">
+                        <p id="join-error" class="text-red-500 text-sm hidden"></p>
+                        <button type="submit" class="w-full bg-green-500 text-white py-3 rounded-lg hover:bg-green-600 transition duration-300 font-bold text-lg">Gabung</button>
+                    </form>
+                </div>
+                
+                <!-- Kolom Login/Register Pembuat Kuis (Disembunyikan jika sudah login) -->
+                <div id="auth-section" class="w-full md:w-1/2 p-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg">
+                    <h2 id="auth-title" class="text-3xl font-bold text-center mb-4 text-indigo-600 dark:text-indigo-400">Masuk Pembuat Kuis</h2>
+                    <form id="auth-form">
+                        <div class="mb-4">
+                            <label class="block text-gray-700 dark:text-gray-300 mb-2" for="auth-email">Email</label>
+                            <input type="email" id="auth-email" class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div class="mb-6">
+                            <label class="block text-gray-700 dark:text-gray-300 mb-2" for="auth-password">Kata Sandi</label>
+                            <input type="password" id="auth-password" class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <p id="auth-error" class="text-red-500 text-sm mb-4 hidden"></p>
+                        <button id="auth-submit-btn" type="submit" class="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 transition duration-300">Masuk</button>
+                    </form>
+                    <button id="auth-toggle-btn" class="w-full mt-4 text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
+                        Belum punya akun? Daftar di sini.
+                    </button>
+                </div>
+            </div>
+        </div>
 
-try {
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
-    // setLogLevel('debug'); // Uncomment for detailed logs
-} catch (e) {
-    console.error("Firebase initialization failed:", e);
-}
+        <!-- ===== Halaman 2: Dashboard Pembuat Kuis ===== -->
+        <div id="page-dashboard" class="page">
+            <div class="max-w-7xl mx-auto">
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-bold">Dashboard Kuis Saya</h1>
+                    <button id="create-quiz-btn" class="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition duration-300 flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        <span class="ml-2">Buat Kuis Baru</span>
+                    </button>
+                </div>
+                <div id="quiz-list-container">
+                    <!-- Daftar kuis akan di-render di sini oleh JavaScript -->
+                </div>
+            </div>
+        </div>
 
+        <!-- ===== Halaman 3: Pembuat/Editor Kuis ===== -->
+        <div id="page-quiz-builder" class="page">
+             <div class="max-w-4xl mx-auto bg-white dark:bg-gray-800 p-8 rounded-lg shadow-lg">
+                <h2 id="builder-title" class="text-3xl font-bold mb-6">Buat Kuis Baru</h2>
+                <input type="hidden" id="builder-quiz-id">
+                <div class="mb-6">
+                    <label class="block text-gray-700 dark:text-gray-300 mb-2 text-lg">Judul Kuis</label>
+                    <input type="text" id="builder-title-input" class="w-full px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600">
+                </div>
+                <div class="mb-8">
+                    <label class="block text-gray-700 dark:text-gray-300 mb-2 text-lg">Deskripsi</label>
+                    <textarea id="builder-desc-input" class="w-full px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600" rows="3"></textarea>
+                </div>
 
-// --- Main App Component ---
-export default function App() {
-    const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [page, setPage] = useState('home'); // home, dashboard, createQuiz, editQuiz, hostLobby, game, results, join, playerLobby, playerGame, playerResult
-    const [quizIdToEdit, setQuizIdToEdit] = useState(null);
-    const [gameCode, setGameCode] = useState('');
-    const [nickname, setNickname] = useState('');
-    const [sessionData, setSessionData] = useState(null);
-    const [error, setError] = useState('');
+                <div id="builder-questions-container">
+                    <!-- Pertanyaan akan di-render di sini -->
+                </div>
 
-    useEffect(() => {
-        if (!auth) return;
-        const authInit = async () => {
+                <div class="flex justify-between items-center mt-8">
+                    <button id="builder-add-question-btn" class="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-6 py-2 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition">Tambah Pertanyaan</button>
+                    <button id="builder-save-quiz-btn" class="bg-green-500 text-white px-8 py-3 rounded-lg hover:bg-green-600 transition font-bold">Simpan Kuis</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ===== Halaman 4: Lobi Host ===== -->
+        <div id="page-host-lobby" class="page">
+            <div class="text-center max-w-2xl mx-auto">
+                <h1 class="text-4xl font-bold mb-4">Lobi Permainan</h1>
+                <p class="text-lg text-gray-600 dark:text-gray-400 mb-6">Bagikan kode ini agar peserta bisa bergabung:</p>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg mb-8 inline-block">
+                    <p id="host-lobby-code" class="text-6xl font-bold tracking-widest text-indigo-600 dark:text-indigo-400"></p>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
+                    <h2 class="text-2xl font-bold mb-4">Peserta (<span id="host-lobby-player-count">0</span>)</h2>
+                    <div id="host-lobby-players" class="flex flex-wrap justify-center gap-4 min-h-[6rem]">
+                        <!-- Daftar peserta -->
+                    </div>
+                </div>
+                <button id="host-lobby-start-btn" class="mt-8 w-full bg-green-500 text-white py-4 rounded-lg text-xl font-bold hover:bg-green-600 transition disabled:bg-gray-400 disabled:cursor-not-allowed">
+                    Mulai Kuis!
+                </button>
+            </div>
+        </div>
+
+        <!-- ===== Halaman 5: Lobi Peserta ===== -->
+        <div id="page-player-lobby" class="page">
+             <div class="text-center max-w-2xl mx-auto">
+                <h1 class="text-4xl font-bold mb-4">Anda berhasil bergabung!</h1>
+                <p class="text-lg text-gray-600 dark:text-gray-400 mb-8">Selamat datang, <span id="player-lobby-nickname" class="font-bold text-indigo-600 dark:text-indigo-400"></span>! Tunggu pembuat kuis memulai permainan.</p>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
+                    <h2 class="text-2xl font-bold mb-4">Peserta Lain (<span id="player-lobby-player-count">0</span>)</h2>
+                    <div id="player-lobby-players" class="flex flex-wrap justify-center gap-4 min-h-[6rem]">
+                        <!-- Daftar peserta -->
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ===== Halaman 6: Tampilan Permainan Peserta ===== -->
+        <div id="page-player-game" class="page">
+            <div class="max-w-4xl mx-auto text-center">
+                <div class="flex justify-between items-center mb-4">
+                    <span id="player-game-q-number" class="text-lg font-semibold"></span>
+                    <span id="player-game-score" class="text-lg font-semibold">Skor: 0</span>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-lg mb-6 min-h-[10rem] flex items-center justify-center">
+                    <h2 id="player-game-q-text" class="text-3xl font-bold"></h2>
+                </div>
+                <div id="player-game-options" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Opsi jawaban -->
+                </div>
+                <div id="player-game-feedback" class="mt-6 text-2xl font-bold">
+                    <!-- Feedback jawaban -->
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== Halaman 7: Hasil Akhir Peserta ===== -->
+        <div id="page-player-result" class="page">
+            <div class="max-w-2xl mx-auto text-center">
+                <h1 class="text-4xl font-bold mb-4">Permainan Selesai!</h1>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg mb-6">
+                    <h2 class="text-2xl font-semibold">Peringkat Anda: <span id="player-result-rank" class="text-indigo-500 font-bold"></span></h2>
+                    <p class="text-xl">Skor Akhir: <span id="player-result-score" class="text-indigo-500 font-bold"></span> poin</p>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
+                    <h2 class="text-2xl font-bold mb-4">Papan Peringkat Akhir</h2>
+                    <ul id="player-result-leaderboard" class="space-y-3 text-left">
+                        <!-- Papan peringkat -->
+                    </ul>
+                </div>
+                <button id="player-result-home-btn" class="mt-8 bg-indigo-600 text-white py-3 px-8 rounded-lg hover:bg-indigo-700 transition">
+                    Kembali ke Halaman Utama
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- ===== JavaScript & Firebase ===== -->
+    <script type="module">
+        // Import fungsi-fungsi Firebase dari CDN
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { 
+            getAuth, 
+            onAuthStateChanged, 
+            createUserWithEmailAndPassword, 
+            signInWithEmailAndPassword, 
+            signOut,
+            signInAnonymously,
+            signInWithCustomToken
+        } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { 
+            getFirestore, 
+            collection, 
+            doc, 
+            addDoc, 
+            setDoc, 
+            getDoc, 
+            getDocs, 
+            updateDoc, 
+            deleteDoc, 
+            query, 
+            where, 
+            onSnapshot, 
+            serverTimestamp, 
+            arrayUnion 
+        } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+        // --- KONFIGURASI FIREBASE ---
+        // PENTING: Ganti dengan konfigurasi Firebase Anda sendiri
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        // --- INISIALISASI FIREBASE ---
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        
+        // --- STATE APLIKASI ---
+        let state = {
+            user: null,
+            isLoginMode: true,
+            quizzes: [],
+            currentQuizBuilder: { questions: [] },
+            gameSessionUnsubscribe: null, // Untuk listener real-time
+            playerSessionUnsubscribe: null,
+            localPlayer: { name: '', code: '', id: crypto.randomUUID() }
+        };
+
+        // --- REFERENSI ELEMEN DOM ---
+        const pages = {
+            home: document.getElementById('page-home'),
+            dashboard: document.getElementById('page-dashboard'),
+            quizBuilder: document.getElementById('page-quiz-builder'),
+            hostLobby: document.getElementById('page-host-lobby'),
+            playerLobby: document.getElementById('page-player-lobby'),
+            playerGame: document.getElementById('page-player-game'),
+            playerResult: document.getElementById('page-player-result'),
+        };
+        
+        const navBrand = document.getElementById('nav-brand');
+        const navLinks = document.getElementById('nav-links');
+        
+        // Halaman Home
+        const authSection = document.getElementById('auth-section');
+        const authForm = document.getElementById('auth-form');
+        const authTitle = document.getElementById('auth-title');
+        const authSubmitBtn = document.getElementById('auth-submit-btn');
+        const authToggleBtn = document.getElementById('auth-toggle-btn');
+        const authError = document.getElementById('auth-error');
+        const joinForm = document.getElementById('join-form');
+        const joinError = document.getElementById('join-error');
+
+        // Halaman Dashboard
+        const createQuizBtn = document.getElementById('create-quiz-btn');
+        const quizListContainer = document.getElementById('quiz-list-container');
+        
+        // Halaman Quiz Builder
+        const builderTitle = document.getElementById('builder-title');
+        const builderQuizId = document.getElementById('builder-quiz-id');
+        const builderTitleInput = document.getElementById('builder-title-input');
+        const builderDescInput = document.getElementById('builder-desc-input');
+        const builderQuestionsContainer = document.getElementById('builder-questions-container');
+        const builderAddQuestionBtn = document.getElementById('builder-add-question-btn');
+        const builderSaveQuizBtn = document.getElementById('builder-save-quiz-btn');
+
+        // --- FUNGSI NAVIGASI ---
+        function navigate(pageKey) {
+            Object.values(pages).forEach(page => page.classList.remove('active'));
+            if (pages[pageKey]) {
+                pages[pageKey].classList.add('active');
+            }
+        }
+
+        // --- FUNGSI RENDER (UPDATE UI) ---
+
+        function renderNavbar() {
+            if (state.user) {
+                navLinks.innerHTML = `
+                    <button data-page="dashboard" class="nav-btn text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium">Dashboard</button>
+                    <button id="logout-btn" class="ml-4 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium">Keluar</button>
+                `;
+                authSection.classList.add('hidden');
+            } else {
+                navLinks.innerHTML = `<span class="text-sm text-gray-500">Masuk untuk membuat kuis</span>`;
+                authSection.classList.remove('hidden');
+            }
+        }
+
+        function renderDashboard() {
+            if (state.quizzes.length === 0) {
+                quizListContainer.innerHTML = `
+                    <div class="text-center py-16 bg-white dark:bg-gray-800 rounded-lg shadow">
+                        <h2 class="text-xl font-semibold">Anda belum membuat kuis.</h2>
+                        <p class="text-gray-500 dark:text-gray-400 mt-2">Klik "Buat Kuis Baru" untuk memulai.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            quizListContainer.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    ${state.quizzes.map(quiz => `
+                        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden flex flex-col">
+                            <div class="p-6 flex-grow">
+                                <h3 class="text-xl font-bold mb-2">${quiz.title}</h3>
+                                <p class="text-gray-600 dark:text-gray-400 text-sm">${quiz.description}</p>
+                                <p class="text-gray-500 dark:text-gray-500 text-xs mt-2">${quiz.questions?.length || 0} Pertanyaan</p>
+                            </div>
+                            <div class="bg-gray-50 dark:bg-gray-700 p-4 flex justify-between items-center">
+                                <button data-action="start" data-id="${quiz.id}" class="quiz-btn bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 text-sm font-semibold flex items-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path></svg>
+                                    Mulai
+                                </button>
+                                <div class="flex space-x-2">
+                                     <button data-action="edit" data-id="${quiz.id}" class="quiz-btn text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z"></path><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd"></path></svg>
+                                    </button>
+                                    <button data-action="delete" data-id="${quiz.id}" class="quiz-btn text-gray-500 hover:text-red-600 dark:hover:text-red-400 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd"></path></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function renderQuizBuilder() {
+            builderQuestionsContainer.innerHTML = state.currentQuizBuilder.questions.map((q, qIndex) => `
+                <div class="mb-8 p-6 border border-gray-200 dark:border-gray-700 rounded-lg relative">
+                     <h3 class="text-xl font-semibold mb-4">Pertanyaan ${qIndex + 1}</h3>
+                     <button data-action="remove-question" data-index="${qIndex}" class="absolute top-4 right-4 text-red-500 hover:text-red-700">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd"></path></svg>
+                    </button>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 dark:text-gray-300 mb-2">Teks Pertanyaan</label>
+                        <input type="text" data-field="text" data-index="${qIndex}" value="${q.text}" class="question-input w-full px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600">
+                    </div>
+                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        ${q.options.map((opt, oIndex) => `
+                            <div class="flex items-center">
+                                <input type="radio" name="correct-answer-${qIndex}" ${q.correctAnswer === oIndex ? 'checked' : ''} data-qindex="${qIndex}" data-oindex="${oIndex}" class="correct-answer-radio mr-3 h-5 w-5 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                                <input type="text" value="${opt}" data-qindex="${qIndex}" data-oindex="${oIndex}" placeholder="Opsi ${oIndex + 1}" class="option-input w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600">
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function renderLobby(participants, target) {
+            const container = document.getElementById(`${target}-lobby-players`);
+            const countEl = document.getElementById(`${target}-lobby-player-count`);
+            
+            countEl.textContent = participants.length;
+            if (participants.length === 0) {
+                container.innerHTML = `<p class="text-gray-500">Menunggu peserta bergabung...</p>`;
+            } else {
+                 container.innerHTML = participants.map(p => {
+                    const isMe = target === 'player' && p.name === state.localPlayer.name;
+                    const bgColor = isMe ? 'bg-green-200 dark:bg-green-800' : 'bg-indigo-100 dark:bg-indigo-900';
+                    const textColor = isMe ? 'text-green-800 dark:text-green-100' : 'text-indigo-800 dark:text-indigo-200';
+                    return `<span class="px-4 py-2 rounded-full font-semibold ${bgColor} ${textColor}">${p.name}</span>`;
+                 }).join('');
+            }
+        }
+        
+        function renderPlayerGame(session, quiz) {
+            const question = quiz.questions[session.currentQuestionIndex];
+            document.getElementById('player-game-q-number').textContent = `Pertanyaan ${session.currentQuestionIndex + 1} dari ${quiz.questions.length}`;
+            document.getElementById('player-game-q-text').textContent = question.text;
+            
+            const optionsContainer = document.getElementById('player-game-options');
+            optionsContainer.innerHTML = question.options.map((option, index) => `
+                <button data-index="${index}" class="player-answer-btn p-6 rounded-lg text-xl font-semibold transition duration-300 w-full text-left bg-indigo-500 hover:bg-indigo-600 text-white">
+                    ${option}
+                </button>
+            `).join('');
+            document.getElementById('player-game-feedback').innerHTML = '';
+        }
+
+        function renderPlayerGameFeedback(isCorrect, selectedIndex, correctAnswerIndex) {
+            const buttons = document.querySelectorAll('.player-answer-btn');
+            buttons.forEach((btn, index) => {
+                btn.disabled = true;
+                if (index === correctAnswerIndex) {
+                    btn.className = btn.className.replace('bg-indigo-500 hover:bg-indigo-600', 'bg-green-500');
+                } else if (index === selectedIndex) {
+                    btn.className = btn.className.replace('bg-indigo-500 hover:bg-indigo-600', 'bg-red-500');
+                } else {
+                    btn.className = btn.className.replace('bg-indigo-500 hover:bg-indigo-600', 'bg-gray-300 dark:bg-gray-700 opacity-70');
+                }
+            });
+            
+            document.getElementById('player-game-feedback').innerHTML = isCorrect 
+                ? `<p class="text-green-500">Jawaban Benar!</p>` 
+                : `<p class="text-red-500">Jawaban Salah!</p>`;
+        }
+
+        function renderPlayerResult(session) {
+            const sortedParticipants = [...session.participants].sort((a, b) => b.score - a.score);
+            const me = sortedParticipants.find(p => p.id === state.localPlayer.id);
+            const myRank = sortedParticipants.findIndex(p => p.id === state.localPlayer.id) + 1;
+
+            document.getElementById('player-result-rank').textContent = `#${myRank}`;
+            document.getElementById('player-result-score').textContent = me.score;
+            
+            document.getElementById('player-result-leaderboard').innerHTML = sortedParticipants.map((p, index) => `
+                <li class="flex items-center justify-between p-3 rounded-lg ${p.id === state.localPlayer.id ? 'bg-green-100 dark:bg-green-900' : 'bg-gray-100 dark:bg-gray-700'}">
+                    <span class="font-bold text-lg">${index + 1}. ${p.name}</span>
+                    <span class="font-semibold text-indigo-600 dark:text-indigo-400">${p.score} poin</span>
+                </li>
+            `).join('');
+        }
+
+        // --- LOGIKA APLIKASI ---
+
+        // Fungsi Autentikasi
+        async function handleAuthForm(e) {
+            e.preventDefault();
+            const email = document.getElementById('auth-email').value;
+            const password = document.getElementById('auth-password').value;
+            authError.classList.add('hidden');
+
             try {
+                if (state.isLoginMode) {
+                    await signInWithEmailAndPassword(auth, email, password);
+                } else {
+                    await createUserWithEmailAndPassword(auth, email, password);
+                }
+            } catch (err) {
+                authError.textContent = 'Email atau kata sandi salah.';
+                authError.classList.remove('hidden');
+                console.error(err);
+            }
+        }
+
+        function toggleAuthMode() {
+            state.isLoginMode = !state.isLoginMode;
+            authTitle.textContent = state.isLoginMode ? 'Masuk Pembuat Kuis' : 'Daftar Pembuat Kuis';
+            authSubmitBtn.textContent = state.isLoginMode ? 'Masuk' : 'Daftar';
+            authToggleBtn.textContent = state.isLoginMode ? 'Belum punya akun? Daftar di sini.' : 'Sudah punya akun? Masuk di sini.';
+            authError.classList.add('hidden');
+        }
+
+        // Fungsi Kuis
+        async function fetchQuizzes() {
+            if (!state.user) return;
+            const q = query(collection(db, `artifacts/${appId}/users/${state.user.uid}/quizzes`));
+            const querySnapshot = await getDocs(q);
+            state.quizzes = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            renderDashboard();
+        }
+        
+        function handleDashboardClick(e) {
+            const button = e.target.closest('.quiz-btn');
+            if (!button) return;
+            
+            const { action, id } = button.dataset;
+            if (action === 'start') handleStartGame(id);
+            if (action === 'edit') handleEditQuiz(id);
+            if (action === 'delete') handleDeleteQuiz(id);
+        }
+
+        async function handleStartGame(quizId) {
+            const code = Math.floor(100000 + Math.random() * 900000).toString();
+            const session = {
+                quizId,
+                hostId: state.user.uid,
+                gameCode: code,
+                status: 'lobby',
+                participants: [],
+                currentQuestionIndex: 0,
+                createdAt: serverTimestamp()
+            };
+            try {
+                const docRef = await addDoc(collection(db, `artifacts/${appId}/public/data/gameSessions`), session);
+                listenToGameSession(code);
+                document.getElementById('host-lobby-code').textContent = code;
+                navigate('hostLobby');
+            } catch (error) {
+                console.error("Error starting game:", error);
+            }
+        }
+        
+        function handleEditQuiz(quizId) {
+            const quiz = state.quizzes.find(q => q.id === quizId);
+            state.currentQuizBuilder = JSON.parse(JSON.stringify(quiz)); // Deep copy
+            
+            builderTitle.textContent = "Edit Kuis";
+            builderQuizId.value = quiz.id;
+            builderTitleInput.value = quiz.title;
+            builderDescInput.value = quiz.description;
+            renderQuizBuilder();
+            navigate('quizBuilder');
+        }
+        
+        async function handleDeleteQuiz(quizId) {
+            if (confirm("Apakah Anda yakin ingin menghapus kuis ini?")) {
+                try {
+                    await deleteDoc(doc(db, `artifacts/${appId}/users/${state.user.uid}/quizzes`, quizId));
+                    fetchQuizzes(); // Refresh list
+                } catch (error) {
+                    console.error("Error deleting quiz:", error);
+                }
+            }
+        }
+        
+        // Fungsi Quiz Builder
+        function setupNewQuiz() {
+            state.currentQuizBuilder = {
+                title: '',
+                description: '',
+                questions: [{ text: '', type: 'multiple-choice', options: ['', '', '', ''], correctAnswer: 0 }]
+            };
+            builderTitle.textContent = "Buat Kuis Baru";
+            builderQuizId.value = '';
+            builderTitleInput.value = '';
+            builderDescInput.value = '';
+            renderQuizBuilder();
+            navigate('quizBuilder');
+        }
+
+        function handleBuilderChanges(e) {
+            const el = e.target;
+            const { qindex, oindex, field, index } = el.dataset;
+            
+            if (el.classList.contains('question-input')) {
+                state.currentQuizBuilder.questions[index][field] = el.value;
+            }
+            if (el.classList.contains('option-input')) {
+                state.currentQuizBuilder.questions[qindex].options[oindex] = el.value;
+            }
+            if (el.classList.contains('correct-answer-radio')) {
+                state.currentQuizBuilder.questions[qindex].correctAnswer = parseInt(oindex);
+            }
+        }
+        
+        function addQuestionToBuilder() {
+            state.currentQuizBuilder.questions.push({ text: '', type: 'multiple-choice', options: ['', '', '', ''], correctAnswer: 0 });
+            renderQuizBuilder();
+        }
+
+        function removeQuestionFromBuilder(index) {
+            state.currentQuizBuilder.questions.splice(index, 1);
+            renderQuizBuilder();
+        }
+        
+        async function saveQuiz() {
+            const quizData = {
+                title: builderTitleInput.value,
+                description: builderDescInput.value,
+                questions: state.currentQuizBuilder.questions,
+                creatorId: state.user.uid
+            };
+            
+            try {
+                if (builderQuizId.value) {
+                    await setDoc(doc(db, `artifacts/${appId}/users/${state.user.uid}/quizzes`, builderQuizId.value), quizData);
+                } else {
+                    await addDoc(collection(db, `artifacts/${appId}/users/${state.user.uid}/quizzes`), quizData);
+                }
+                await fetchQuizzes();
+                navigate('dashboard');
+            } catch (error) {
+                console.error("Error saving quiz:", error);
+            }
+        }
+
+        // Fungsi Sesi Permainan
+        function listenToGameSession(gameCode) {
+            if (state.gameSessionUnsubscribe) state.gameSessionUnsubscribe();
+            
+            const q = query(collection(db, `artifacts/${appId}/public/data/gameSessions`), where("gameCode", "==", gameCode));
+            state.gameSessionUnsubscribe = onSnapshot(q, (snapshot) => {
+                if (snapshot.empty) return;
+                const session = snapshot.docs[0].data();
+                renderLobby(session.participants, 'host');
+                document.getElementById('host-lobby-start-btn').disabled = session.participants.length === 0;
+            });
+        }
+        
+        async function startGameFromLobby() {
+            const gameCode = document.getElementById('host-lobby-code').textContent;
+            const q = query(collection(db, `artifacts/${appId}/public/data/gameSessions`), where("gameCode", "==", gameCode));
+            const snapshot = await getDocs(q);
+            if (!snapshot.empty) {
+                const sessionRef = snapshot.docs[0].ref;
+                await updateDoc(sessionRef, { status: 'in-progress' });
+                // Host doesn't need to navigate away from lobby for this simple version
+                alert("Kuis telah dimulai untuk para peserta!");
+            }
+        }
+        
+        async function handleJoinForm(e) {
+            e.preventDefault();
+            const code = document.getElementById('join-code-input').value.trim();
+            const name = document.getElementById('join-name-input').value.trim();
+            joinError.classList.add('hidden');
+            
+            if (!code || !name) {
+                joinError.textContent = "Kode dan nama harus diisi.";
+                joinError.classList.remove('hidden');
+                return;
+            }
+            
+            try {
+                const q = query(collection(db, `artifacts/${appId}/public/data/gameSessions`), where("gameCode", "==", code), where("status", "==", "lobby"));
+                const snapshot = await getDocs(q);
+                if (snapshot.empty) {
+                    joinError.textContent = "Kuis tidak ditemukan atau sudah dimulai.";
+                    joinError.classList.remove('hidden');
+                    return;
+                }
+                
+                const sessionRef = snapshot.docs[0].ref;
+                state.localPlayer.name = name;
+                state.localPlayer.code = code;
+                
+                await updateDoc(sessionRef, {
+                    participants: arrayUnion({ id: state.localPlayer.id, name, score: 0 })
+                });
+                
+                listenToPlayerSession(code);
+                document.getElementById('player-lobby-nickname').textContent = name;
+                navigate('playerLobby');
+                
+            } catch (err) {
+                console.error("Error joining game:", err);
+                joinError.textContent = "Gagal bergabung dengan kuis.";
+                joinError.classList.remove('hidden');
+            }
+        }
+        
+        function listenToPlayerSession(gameCode) {
+            if (state.playerSessionUnsubscribe) state.playerSessionUnsubscribe();
+            
+            const q = query(collection(db, `artifacts/${appId}/public/data/gameSessions`), where("gameCode", "==", gameCode));
+            state.playerSessionUnsubscribe = onSnapshot(q, async (snapshot) => {
+                if (snapshot.empty) {
+                    alert("Sesi permainan telah berakhir.");
+                    navigate('home');
+                    return;
+                }
+                const session = snapshot.docs[0].data();
+                
+                if (session.status === 'lobby') {
+                    renderLobby(session.participants, 'player');
+                } else if (session.status === 'in-progress') {
+                    const quizDoc = await getDoc(doc(db, `artifacts/${appId}/users/${session.hostId}/quizzes`, session.quizId));
+                    const quiz = quizDoc.data();
+                    renderPlayerGame(session, quiz);
+                    navigate('playerGame');
+                } else if (session.status === 'finished') {
+                    renderPlayerResult(session);
+                    navigate('playerResult');
+                    if (state.playerSessionUnsubscribe) state.playerSessionUnsubscribe(); // Stop listening
+                }
+            });
+        }
+        
+        async function handlePlayerAnswer(selectedIndex) {
+            const q = query(collection(db, `artifacts/${appId}/public/data/gameSessions`), where("gameCode", "==", state.localPlayer.code));
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) return;
+            
+            const sessionRef = snapshot.docs[0].ref;
+            const session = snapshot.docs[0].data();
+            const quizDoc = await getDoc(doc(db, `artifacts/${appId}/users/${session.hostId}/quizzes`, session.quizId));
+            const quiz = quizDoc.data();
+            
+            const question = quiz.questions[session.currentQuestionIndex];
+            const isCorrect = selectedIndex === question.correctAnswer;
+            
+            renderPlayerGameFeedback(isCorrect, selectedIndex, question.correctAnswer);
+            
+            if (isCorrect) {
+                const me = session.participants.find(p => p.id === state.localPlayer.id);
+                const newScore = (me.score || 0) + 100; // Simple scoring
+                const updatedParticipants = session.participants.map(p => 
+                    p.id === state.localPlayer.id ? { ...p, score: newScore } : p
+                );
+                await updateDoc(sessionRef, { participants: updatedParticipants });
+                document.getElementById('player-game-score').textContent = `Skor: ${newScore}`;
+            }
+        }
+        
+        // --- EVENT LISTENERS ---
+        
+        // Navigasi
+        navBrand.addEventListener('click', () => navigate(state.user ? 'dashboard' : 'home'));
+        navLinks.addEventListener('click', (e) => {
+            if (e.target.id === 'logout-btn') {
+                signOut(auth);
+            } else if (e.target.classList.contains('nav-btn')) {
+                navigate(e.target.dataset.page);
+            }
+        });
+        
+        // Auth
+        authForm.addEventListener('submit', handleAuthForm);
+        authToggleBtn.addEventListener('click', toggleAuthMode);
+        
+        // Join
+        joinForm.addEventListener('submit', handleJoinForm);
+
+        // Dashboard
+        createQuizBtn.addEventListener('click', setupNewQuiz);
+        quizListContainer.addEventListener('click', handleDashboardClick);
+        
+        // Quiz Builder
+        builderAddQuestionBtn.addEventListener('click', addQuestionToBuilder);
+        builderSaveQuizBtn.addEventListener('click', saveQuiz);
+        builderQuestionsContainer.addEventListener('input', handleBuilderChanges);
+        builderQuestionsContainer.addEventListener('change', handleBuilderChanges); // For radio buttons
+        builderQuestionsContainer.addEventListener('click', (e) => {
+            const button = e.target.closest('button');
+            if (button && button.dataset.action === 'remove-question') {
+                removeQuestionFromBuilder(parseInt(button.dataset.index));
+            }
+        });
+        
+        // Host Lobby
+        document.getElementById('host-lobby-start-btn').addEventListener('click', startGameFromLobby);
+        
+        // Player Game
+        document.getElementById('page-player-game').addEventListener('click', (e) => {
+            const btn = e.target.closest('.player-answer-btn');
+            if (btn) {
+                handlePlayerAnswer(parseInt(btn.dataset.index));
+            }
+        });
+        
+        // Player Result
+        document.getElementById('player-result-home-btn').addEventListener('click', () => {
+            if (state.playerSessionUnsubscribe) state.playerSessionUnsubscribe();
+            navigate('home');
+        });
+
+        // --- INISIALISASI APLIKASI ---
+        onAuthStateChanged(auth, async (user) => {
+            if (user && !user.isAnonymous) {
+                state.user = user;
+                await fetchQuizzes();
+                if (pages.home.classList.contains('active')) {
+                    navigate('dashboard');
+                }
+            } else {
+                state.user = null;
+                state.quizzes = [];
+                navigate('home');
+            }
+            renderNavbar();
+        });
+        
+        // Inisialisasi Auth Anonim untuk Peserta
+        const initAuth = async () => {
+             try {
                  if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await signInWithCustomToken(auth, __initial_auth_token);
                 } else {
                     await signInAnonymously(auth);
                 }
             } catch (error) {
-                console.error("Error signing in:", error);
-                setError("Gagal melakukan otentikasi. Silakan coba lagi.");
+                console.error("Error signing in anonymously:", error);
             }
         };
 
-        authInit();
+        initAuth();
 
-        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-            setUser(currentUser && !currentUser.isAnonymous ? currentUser : null);
-            setLoading(false);
-        });
+    </script>
+</body>
+</html>
 
-        return () => unsubscribe();
-    }, []);
-
-    const navigate = (pageName) => {
-        setError('');
-        setPage(pageName);
-    };
-
-    const handleJoinQuiz = async (code, name) => {
-        if (!code || !name) {
-            setError("Kode permainan dan nama panggilan harus diisi.");
-            return;
-        }
-        try {
-            const sessionsRef = collection(db, `artifacts/${appId}/public/data/gameSessions`);
-            const q = query(sessionsRef, where("gameCode", "==", code), where("status", "==", "lobby"));
-            const querySnapshot = await getDocs(q);
-
-            if (querySnapshot.empty) {
-                setError("Kuis tidak ditemukan atau sudah dimulai. Periksa kembali kode Anda.");
-                return;
-            }
-
-            const sessionDoc = querySnapshot.docs[0];
-            const sessionId = sessionDoc.id;
-            const participant = { id: crypto.randomUUID(), name, score: 0 };
-            
-            await updateDoc(doc(db, `artifacts/${appId}/public/data/gameSessions`, sessionId), {
-                participants: arrayUnion(participant)
-            });
-            
-            setGameCode(code);
-            setNickname(name);
-            navigate('playerLobby');
-
-        } catch (err) {
-            console.error("Error joining quiz:", err);
-            setError("Gagal bergabung dengan kuis. Silakan coba lagi.");
-        }
-    };
-
-    const renderPage = () => {
-        switch (page) {
-            case 'dashboard': return <Dashboard navigate={navigate} setQuizIdToEdit={setQuizIdToEdit} setGameCode={setGameCode} />;
-            case 'createQuiz': return <QuizBuilder navigate={navigate} />;
-            case 'editQuiz': return <QuizBuilder navigate={navigate} quizId={quizIdToEdit} />;
-            case 'hostLobby': return <HostLobby navigate={navigate} gameCode={gameCode} setSessionData={setSessionData} />;
-            case 'game': return <GameHostView navigate={navigate} sessionData={sessionData} />;
-            case 'results': return <ResultsHostView navigate={navigate} sessionData={sessionData} />;
-            case 'join': return <JoinScreen onJoin={handleJoinQuiz} error={error} setError={setError} />;
-            case 'playerLobby': return <PlayerLobby navigate={navigate} gameCode={gameCode} nickname={nickname} />;
-            case 'playerGame': return <PlayerGameView navigate={navigate} gameCode={gameCode} nickname={nickname} />;
-            case 'playerResult': return <PlayerResultView navigate={navigate} gameCode={gameCode} nickname={nickname} />;
-            default: return <HomeScreen navigate={navigate} user={user} loading={loading} />;
-        }
-    };
-
-    return (
-        <div className="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen font-sans">
-            <Navbar user={user} navigate={navigate} />
-            <main className="p-4 sm:p-6 md:p-8">
-                {renderPage()}
-            </main>
-        </div>
-    );
-}
-
-// --- Components ---
-
-function Navbar({ user, navigate }) {
-    const handleSignOut = async () => {
-        try {
-            await signOut(auth);
-            navigate('home');
-        } catch (error) {
-            console.error("Error signing out:", error);
-        }
-    };
-
-    return (
-        <nav className="bg-white dark:bg-gray-800 shadow-md">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex items-center justify-between h-16">
-                    <div className="flex-shrink-0">
-                        <span onClick={() => navigate(user ? 'dashboard' : 'home')} className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer">
-                           Kuis Interaktif
-                        </span>
-                    </div>
-                    <div className="flex items-center">
-                        {user ? (
-                            <>
-                                <button onClick={() => navigate('dashboard')} className="text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium">Dashboard</button>
-                                <button onClick={handleSignOut} className="ml-4 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium">Keluar</button>
-                            </>
-                        ) : (
-                           <span className="text-sm text-gray-500">Masuk untuk membuat kuis</span>
-                        )}
-                    </div>
-                </div>
-            </div>
-        </nav>
-    );
-}
-
-
-function HomeScreen({ navigate, user, loading }) {
-    const [isLogin, setIsLogin] = useState(true);
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError('');
-        if (!email || !password) {
-            setError('Email dan kata sandi harus diisi.');
-            return;
-        }
-        try {
-            if (isLogin) {
-                await signInWithEmailAndPassword(auth, email, password);
-            } else {
-                await createUserWithEmailAndPassword(auth, email, password);
-            }
-            navigate('dashboard');
-        } catch (err) {
-            setError(err.message.includes('auth/invalid-credential') ? 'Email atau kata sandi salah.' : 'Terjadi kesalahan. Silakan coba lagi.');
-            console.error(err);
-        }
-    };
-
-    if (loading) {
-        return <div className="text-center p-10">Memuat...</div>;
-    }
-
-    return (
-        <div className="flex flex-col md:flex-row items-center justify-center gap-8 md:gap-16 min-h-[calc(100vh-10rem)]">
-            <div className="w-full md:w-1/2 p-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg">
-                <h2 className="text-3xl font-bold text-center mb-4 text-indigo-600 dark:text-indigo-400">Gabung Kuis</h2>
-                <p className="text-center text-gray-600 dark:text-gray-400 mb-6">Masukkan kode permainan untuk mulai.</p>
-                <JoinScreen onJoin={(code, name) => navigate('join', { code, name })} />
-            </div>
-            
-            {!user && (
-                <div className="w-full md:w-1/2 p-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg">
-                    <h2 className="text-3xl font-bold text-center mb-4 text-indigo-600 dark:text-indigo-400">{isLogin ? 'Masuk Pembuat Kuis' : 'Daftar Pembuat Kuis'}</h2>
-                    <form onSubmit={handleSubmit}>
-                        <div className="mb-4">
-                            <label className="block text-gray-700 dark:text-gray-300 mb-2" htmlFor="email">Email</label>
-                            <input type="email" id="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                        </div>
-                        <div className="mb-6">
-                             <label className="block text-gray-700 dark:text-gray-300 mb-2" htmlFor="password">Kata Sandi</label>
-                            <input type="password" id="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                        </div>
-                        {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
-                        <button type="submit" className="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 transition duration-300">{isLogin ? 'Masuk' : 'Daftar'}</button>
-                    </form>
-                    <button onClick={() => setIsLogin(!isLogin)} className="w-full mt-4 text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
-                        {isLogin ? 'Belum punya akun? Daftar di sini.' : 'Sudah punya akun? Masuk di sini.'}
-                    </button>
-                </div>
-            )}
-        </div>
-    );
-}
-
-function JoinScreen({ onJoin }) {
-    const [code, setCode] = useState('');
-    const [name, setName] = useState('');
-    const [error, setError] = useState('');
-
-    const handleJoin = async () => {
-        if (!code || !name) {
-            setError("Kode dan nama panggilan harus diisi.");
-            return;
-        }
-        setError('');
-        try {
-            const sessionsRef = collection(db, `artifacts/${appId}/public/data/gameSessions`);
-            const q = query(sessionsRef, where("gameCode", "==", code), where("status", "==", "lobby"));
-            const querySnapshot = await getDocs(q);
-
-            if (querySnapshot.empty) {
-                setError("Kuis tidak ditemukan atau sudah dimulai.");
-                return;
-            }
-
-            const sessionDoc = querySnapshot.docs[0];
-            const participant = { id: crypto.randomUUID(), name, score: 0 };
-            
-            await updateDoc(doc(db, `artifacts/${appId}/public/data/gameSessions`, sessionDoc.id), {
-                participants: arrayUnion(participant)
-            });
-
-            onJoin(code, name);
-
-        } catch (err) {
-            console.error("Error joining quiz:", err);
-            setError("Gagal bergabung dengan kuis.");
-        }
-    };
-
-    return (
-        <div className="space-y-4">
-            <input 
-                type="text" 
-                placeholder="Kode Permainan" 
-                value={code} 
-                onChange={(e) => setCode(e.target.value.trim())}
-                className="w-full px-4 py-3 border rounded-lg dark:bg-gray-700 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-lg"
-            />
-            <input 
-                type="text" 
-                placeholder="Nama Panggilan" 
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full px-4 py-3 border rounded-lg dark:bg-gray-700 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-lg"
-            />
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            <button 
-                onClick={handleJoin} 
-                className="w-full bg-green-500 text-white py-3 rounded-lg hover:bg-green-600 transition duration-300 font-bold text-lg"
-            >
-                Gabung
-            </button>
-        </div>
-    );
-}
-
-
-function Dashboard({ navigate, setQuizIdToEdit, setGameCode }) {
-    const [quizzes, setQuizzes] = useState([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        if (!auth.currentUser) return;
-        const q = query(collection(db, `artifacts/${appId}/users/${auth.currentUser.uid}/quizzes`));
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
-            const quizzesData = [];
-            querySnapshot.forEach((doc) => {
-                quizzesData.push({ id: doc.id, ...doc.data() });
-            });
-            setQuizzes(quizzesData);
-            setLoading(false);
-        }, (error) => {
-            console.error("Error fetching quizzes:", error);
-            setLoading(false);
-        });
-
-        return () => unsubscribe();
-    }, []);
-
-    const handleStartGame = async (quizId) => {
-        const code = Math.floor(100000 + Math.random() * 900000).toString();
-        const session = {
-            quizId: quizId,
-            hostId: auth.currentUser.uid,
-            gameCode: code,
-            status: 'lobby', // lobby, in-progress, finished
-            participants: [],
-            currentQuestionIndex: 0,
-            createdAt: serverTimestamp()
-        };
-        try {
-            await addDoc(collection(db, `artifacts/${appId}/public/data/gameSessions`), session);
-            setGameCode(code);
-            navigate('hostLobby');
-        } catch (error) {
-            console.error("Error starting game session:", error);
-        }
-    };
-    
-    const handleDeleteQuiz = async (quizId) => {
-        if (window.confirm("Apakah Anda yakin ingin menghapus kuis ini?")) {
-            try {
-                await deleteDoc(doc(db, `artifacts/${appId}/users/${auth.currentUser.uid}/quizzes`, quizId));
-            } catch (error) {
-                console.error("Error deleting quiz:", error);
-            }
-        }
-    };
-
-    if (loading) return <div className="text-center p-10">Memuat kuis Anda...</div>;
-
-    return (
-        <div className="max-w-7xl mx-auto">
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold">Dashboard Kuis Saya</h1>
-                <button onClick={() => navigate('createQuiz')} className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition duration-300 flex items-center">
-                    <PlusIcon /> <span className="ml-2">Buat Kuis Baru</span>
-                </button>
-            </div>
-            {quizzes.length === 0 ? (
-                <div className="text-center py-16 bg-white dark:bg-gray-800 rounded-lg shadow">
-                    <h2 className="text-xl font-semibold">Anda belum membuat kuis.</h2>
-                    <p className="text-gray-500 dark:text-gray-400 mt-2">Klik "Buat Kuis Baru" untuk memulai.</p>
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {quizzes.map(quiz => (
-                        <div key={quiz.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden flex flex-col">
-                            <div className="p-6 flex-grow">
-                                <h3 className="text-xl font-bold mb-2">{quiz.title}</h3>
-                                <p className="text-gray-600 dark:text-gray-400 text-sm">{quiz.description}</p>
-                                <p className="text-gray-500 dark:text-gray-500 text-xs mt-2">{quiz.questions?.length || 0} Pertanyaan</p>
-                            </div>
-                            <div className="bg-gray-50 dark:bg-gray-700 p-4 flex justify-between items-center">
-                                <button onClick={() => handleStartGame(quiz.id)} className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 text-sm font-semibold flex items-center">
-                                    <PlayIcon /> Mulai
-                                </button>
-                                <div className="flex space-x-2">
-                                     <button onClick={() => { setQuizIdToEdit(quiz.id); navigate('editQuiz'); }} className="text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600">
-                                        <EditIcon />
-                                    </button>
-                                    <button onClick={() => handleDeleteQuiz(quiz.id)} className="text-gray-500 hover:text-red-600 dark:hover:text-red-400 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600">
-                                        <TrashIcon />
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-}
-
-function QuizBuilder({ navigate, quizId }) {
-    const [title, setTitle] = useState('');
-    const [description, setDescription] = useState('');
-    const [questions, setQuestions] = useState([{ text: '', type: 'multiple-choice', options: ['', '', '', ''], correctAnswer: 0, timeLimit: 20 }]);
-    
-    useEffect(() => {
-        if (quizId) {
-            const fetchQuiz = async () => {
-                const quizDoc = await getDoc(doc(db, `artifacts/${appId}/users/${auth.currentUser.uid}/quizzes`, quizId));
-                if (quizDoc.exists()) {
-                    const data = quizDoc.data();
-                    setTitle(data.title);
-                    setDescription(data.description);
-                    setQuestions(data.questions);
-                }
-            };
-            fetchQuiz();
-        }
-    }, [quizId]);
-
-    const handleQuestionChange = (index, field, value) => {
-        const newQuestions = [...questions];
-        newQuestions[index][field] = value;
-        setQuestions(newQuestions);
-    };
-
-    const handleOptionChange = (qIndex, oIndex, value) => {
-        const newQuestions = [...questions];
-        newQuestions[qIndex].options[oIndex] = value;
-        setQuestions(newQuestions);
-    };
-
-    const addQuestion = () => {
-        setQuestions([...questions, { text: '', type: 'multiple-choice', options: ['', '', '', ''], correctAnswer: 0, timeLimit: 20 }]);
-    };
-    
-    const removeQuestion = (index) => {
-        const newQuestions = questions.filter((_, i) => i !== index);
-        setQuestions(newQuestions);
-    };
-
-    const handleSaveQuiz = async () => {
-        const quizData = { title, description, questions, creatorId: auth.currentUser.uid };
-        try {
-            if (quizId) {
-                await setDoc(doc(db, `artifacts/${appId}/users/${auth.currentUser.uid}/quizzes`, quizId), quizData);
-            } else {
-                await addDoc(collection(db, `artifacts/${appId}/users/${auth.currentUser.uid}/quizzes`), quizData);
-            }
-            navigate('dashboard');
-        } catch (error) {
-            console.error("Error saving quiz:", error);
-        }
-    };
-
-    return (
-        <div className="max-w-4xl mx-auto bg-white dark:bg-gray-800 p-8 rounded-lg shadow-lg">
-            <h2 className="text-3xl font-bold mb-6">{quizId ? 'Edit Kuis' : 'Buat Kuis Baru'}</h2>
-            <div className="mb-6">
-                <label className="block text-gray-700 dark:text-gray-300 mb-2 text-lg">Judul Kuis</label>
-                <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600" />
-            </div>
-            <div className="mb-8">
-                <label className="block text-gray-700 dark:text-gray-300 mb-2 text-lg">Deskripsi</label>
-                <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600" rows="3"></textarea>
-            </div>
-
-            {questions.map((q, qIndex) => (
-                <div key={qIndex} className="mb-8 p-6 border border-gray-200 dark:border-gray-700 rounded-lg relative">
-                     <h3 className="text-xl font-semibold mb-4">Pertanyaan {qIndex + 1}</h3>
-                     <button onClick={() => removeQuestion(qIndex)} className="absolute top-4 right-4 text-red-500 hover:text-red-700">
-                        <TrashIcon />
-                    </button>
-                    <div className="mb-4">
-                        <label className="block text-gray-700 dark:text-gray-300 mb-2">Teks Pertanyaan</label>
-                        <input type="text" value={q.text} onChange={(e) => handleQuestionChange(qIndex, 'text', e.target.value)} className="w-full px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600" />
-                    </div>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {q.options.map((opt, oIndex) => (
-                            <div key={oIndex} className="flex items-center">
-                                <input type="radio" name={`correct-answer-${qIndex}`} checked={q.correctAnswer === oIndex} onChange={() => handleQuestionChange(qIndex, 'correctAnswer', oIndex)} className="mr-3 h-5 w-5 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded" />
-                                <input type="text" value={opt} onChange={(e) => handleOptionChange(qIndex, oIndex, e.target.value)} placeholder={`Opsi ${oIndex + 1}`} className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600" />
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            ))}
-
-            <div className="flex justify-between items-center mt-8">
-                <button onClick={addQuestion} className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-6 py-2 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition">Tambah Pertanyaan</button>
-                <button onClick={handleSaveQuiz} className="bg-green-500 text-white px-8 py-3 rounded-lg hover:bg-green-600 transition font-bold">Simpan Kuis</button>
-            </div>
-        </div>
-    );
-}
-
-function HostLobby({ navigate, gameCode, setSessionData }) {
-    const [participants, setParticipants] = useState([]);
-    const [sessionId, setSessionId] = useState(null);
-
-    useEffect(() => {
-        if (!gameCode) return;
-
-        const sessionsRef = collection(db, `artifacts/${appId}/public/data/gameSessions`);
-        const q = query(sessionsRef, where("gameCode", "==", gameCode));
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
-            if (!querySnapshot.empty) {
-                const sessionDoc = querySnapshot.docs[0];
-                const data = sessionDoc.data();
-                setSessionId(sessionDoc.id);
-                setParticipants(data.participants || []);
-                setSessionData(data);
-            }
-        });
-
-        return () => unsubscribe();
-    }, [gameCode, setSessionData]);
-
-    const handleStartGame = async () => {
-        if (sessionId) {
-            await updateDoc(doc(db, `artifacts/${appId}/public/data/gameSessions`, sessionId), { status: 'in-progress' });
-            navigate('game');
-        }
-    };
-
-    return (
-        <div className="text-center max-w-2xl mx-auto">
-            <h1 className="text-4xl font-bold mb-4">Lobi Permainan</h1>
-            <p className="text-lg text-gray-600 dark:text-gray-400 mb-6">Bagikan kode ini agar peserta bisa bergabung:</p>
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg mb-8 inline-block">
-                <p className="text-6xl font-bold tracking-widest text-indigo-600 dark:text-indigo-400">{gameCode}</p>
-            </div>
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
-                <h2 className="text-2xl font-bold mb-4">Peserta ({participants.length})</h2>
-                <div className="flex flex-wrap justify-center gap-4 min-h-[6rem]">
-                    {participants.length > 0 ? participants.map(p => (
-                        <span key={p.id} className="bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 px-4 py-2 rounded-full font-semibold">{p.name}</span>
-                    )) : <p className="text-gray-500">Menunggu peserta bergabung...</p>}
-                </div>
-            </div>
-            <button onClick={handleStartGame} disabled={participants.length === 0} className="mt-8 w-full bg-green-500 text-white py-4 rounded-lg text-xl font-bold hover:bg-green-600 transition disabled:bg-gray-400 disabled:cursor-not-allowed">
-                Mulai Kuis!
-            </button>
-        </div>
-    );
-}
-
-function PlayerLobby({ navigate, gameCode, nickname }) {
-    const [participants, setParticipants] = useState([]);
-
-    useEffect(() => {
-        const sessionsRef = collection(db, `artifacts/${appId}/public/data/gameSessions`);
-        const q = query(sessionsRef, where("gameCode", "==", gameCode));
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
-            if (!querySnapshot.empty) {
-                const sessionDoc = querySnapshot.docs[0];
-                const data = sessionDoc.data();
-                setParticipants(data.participants || []);
-                if (data.status === 'in-progress') {
-                    navigate('playerGame');
-                }
-            } else {
-                // Game session might have been deleted or code is wrong
-                navigate('home');
-            }
-        });
-
-        return () => unsubscribe();
-    }, [gameCode, navigate]);
-
-    return (
-        <div className="text-center max-w-2xl mx-auto">
-            <h1 className="text-4xl font-bold mb-4">Anda berhasil bergabung!</h1>
-            <p className="text-lg text-gray-600 dark:text-gray-400 mb-8">Selamat datang, <span className="font-bold text-indigo-600 dark:text-indigo-400">{nickname}</span>! Tunggu pembuat kuis memulai permainan.</p>
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
-                <h2 className="text-2xl font-bold mb-4">Peserta Lain ({participants.length})</h2>
-                <div className="flex flex-wrap justify-center gap-4 min-h-[6rem]">
-                    {participants.map(p => (
-                        <span key={p.id} className={`px-4 py-2 rounded-full font-semibold ${p.name === nickname ? 'bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-100' : 'bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200'}`}>{p.name}</span>
-                    ))}
-                </div>
-            </div>
-        </div>
-    );
-}
-
-function GameHostView({ navigate, sessionData }) {
-    const [quiz, setQuiz] = useState(null);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        const fetchQuiz = async () => {
-            if (sessionData) {
-                const quizDoc = await getDoc(doc(db, `artifacts/${appId}/users/${sessionData.hostId}/quizzes`, sessionData.quizId));
-                if (quizDoc.exists()) {
-                    setQuiz(quizDoc.data());
-                }
-                setLoading(false);
-            }
-        };
-        fetchQuiz();
-    }, [sessionData]);
-
-    const handleNextQuestion = async () => {
-        const nextIndex = sessionData.currentQuestionIndex + 1;
-        const sessionsRef = collection(db, `artifacts/${appId}/public/data/gameSessions`);
-        const q = query(sessionsRef, where("gameCode", "==", sessionData.gameCode));
-        const querySnapshot = await getDocs(q);
-        if(!querySnapshot.empty) {
-            const sessionDocRef = querySnapshot.docs[0].ref;
-            if (nextIndex < quiz.questions.length) {
-                await updateDoc(sessionDocRef, { currentQuestionIndex: nextIndex });
-            } else {
-                await updateDoc(sessionDocRef, { status: 'finished' });
-                navigate('results');
-            }
-        }
-    };
-
-    if (loading || !quiz) return <div className="text-center p-10">Memuat pertanyaan...</div>;
-    
-    const currentQuestion = quiz.questions[sessionData.currentQuestionIndex];
-
-    return (
-        <div className="max-w-4xl mx-auto text-center">
-            <h2 className="text-2xl font-semibold mb-2">Pertanyaan {sessionData.currentQuestionIndex + 1} dari {quiz.questions.length}</h2>
-            <p className="text-3xl font-bold p-8 bg-white dark:bg-gray-800 rounded-lg shadow-lg">{currentQuestion.text}</p>
-            <button onClick={handleNextQuestion} className="mt-8 w-full bg-indigo-600 text-white py-4 rounded-lg text-xl font-bold hover:bg-indigo-700 transition">
-                {sessionData.currentQuestionIndex + 1 < quiz.questions.length ? 'Pertanyaan Berikutnya' : 'Lihat Hasil'}
-            </button>
-        </div>
-    );
-}
-
-function PlayerGameView({ navigate, gameCode, nickname }) {
-    const [session, setSession] = useState(null);
-    const [quiz, setQuiz] = useState(null);
-    const [currentQuestion, setCurrentQuestion] = useState(null);
-    const [selectedAnswer, setSelectedAnswer] = useState(null);
-    const [answered, setAnswered] = useState(false);
-
-    useEffect(() => {
-        const sessionsRef = collection(db, `artifacts/${appId}/public/data/gameSessions`);
-        const q = query(sessionsRef, where("gameCode", "==", gameCode));
-        const unsubscribe = onSnapshot(q, async (querySnapshot) => {
-            if (!querySnapshot.empty) {
-                const sessionDoc = querySnapshot.docs[0];
-                const sessionData = sessionDoc.data();
-                setSession(sessionData);
-
-                if (sessionData.status === 'finished') {
-                    navigate('playerResult');
-                    return;
-                }
-
-                if (!quiz) {
-                    const quizDoc = await getDoc(doc(db, `artifacts/${appId}/users/${sessionData.hostId}/quizzes`, sessionData.quizId));
-                    if (quizDoc.exists()) {
-                        setQuiz(quizDoc.data());
-                    }
-                }
-                setSelectedAnswer(null);
-                setAnswered(false);
-            }
-        });
-        return () => unsubscribe();
-    }, [gameCode, quiz, navigate]);
-
-    useEffect(() => {
-        if (quiz && session) {
-            setCurrentQuestion(quiz.questions[session.currentQuestionIndex]);
-        }
-    }, [quiz, session]);
-
-    const handleAnswer = async (answerIndex) => {
-        if (answered) return;
-        setSelectedAnswer(answerIndex);
-        setAnswered(true);
-
-        // Here you would normally save the answer to Firestore.
-        // For simplicity in this prototype, we'll just show feedback.
-    };
-
-    if (!currentQuestion || !session) return <div className="text-center p-10">Menunggu pertanyaan berikutnya...</div>;
-    
-    const isCorrect = selectedAnswer === currentQuestion.correctAnswer;
-
-    return (
-        <div className="max-w-4xl mx-auto text-center">
-            <div className="flex justify-between items-center mb-4">
-                <span className="text-lg font-semibold">Pertanyaan {session.currentQuestionIndex + 1}</span>
-                <span className="text-lg font-semibold">Skor: 0</span>
-            </div>
-            <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-lg mb-6 min-h-[10rem] flex items-center justify-center">
-                <h2 className="text-3xl font-bold">{currentQuestion.text}</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {currentQuestion.options.map((option, index) => (
-                    <button 
-                        key={index}
-                        onClick={() => handleAnswer(index)}
-                        disabled={answered}
-                        className={`p-6 rounded-lg text-xl font-semibold transition duration-300 w-full text-left
-                            ${!answered ? 'bg-indigo-500 hover:bg-indigo-600 text-white' : ''}
-                            ${answered && index === currentQuestion.correctAnswer ? 'bg-green-500 text-white' : ''}
-                            ${answered && index !== currentQuestion.correctAnswer && index === selectedAnswer ? 'bg-red-500 text-white' : ''}
-                            ${answered && index !== currentQuestion.correctAnswer && index !== selectedAnswer ? 'bg-gray-300 dark:bg-gray-700 text-gray-800 dark:text-gray-200 opacity-70' : ''}
-                        `}
-                    >
-                        {option}
-                    </button>
-                ))}
-            </div>
-            {answered && (
-                <div className="mt-6 text-2xl font-bold">
-                    {isCorrect ? <p className="text-green-500">Jawaban Benar!</p> : <p className="text-red-500">Jawaban Salah!</p>}
-                </div>
-            )}
-        </div>
-    );
-}
-
-
-function ResultsHostView({ navigate, sessionData }) {
-    // In a real app, you would fetch all answers for the session and calculate scores.
-    // For this prototype, we'll just show the participants.
-    return (
-        <div className="max-w-2xl mx-auto text-center">
-            <h1 className="text-4xl font-bold mb-6">Hasil Kuis</h1>
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
-                <h2 className="text-2xl font-bold mb-4">Papan Peringkat</h2>
-                <ul className="space-y-3 text-left">
-                    {sessionData?.participants.sort((a, b) => b.score - a.score).map((p, index) => (
-                        <li key={p.id} className="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                            <span className="font-bold text-lg">{index + 1}. {p.name}</span>
-                            <span className="font-semibold text-indigo-600 dark:text-indigo-400">{p.score} poin</span>
-                        </li>
-                    ))}
-                </ul>
-            </div>
-            <button onClick={() => navigate('dashboard')} className="mt-8 bg-indigo-600 text-white py-3 px-8 rounded-lg hover:bg-indigo-700 transition">
-                Kembali ke Dashboard
-            </button>
-        </div>
-    );
-}
-
-function PlayerResultView({ navigate, gameCode, nickname }) {
-    const [session, setSession] = useState(null);
-
-    useEffect(() => {
-        const fetchSession = async () => {
-             const sessionsRef = collection(db, `artifacts/${appId}/public/data/gameSessions`);
-             const q = query(sessionsRef, where("gameCode", "==", gameCode));
-             const querySnapshot = await getDocs(q);
-             if (!querySnapshot.empty) {
-                 setSession(querySnapshot.docs[0].data());
-             }
-        };
-        fetchSession();
-    }, [gameCode]);
-
-    if (!session) return <div className="text-center p-10">Memuat hasil...</div>;
-
-    const myRank = session.participants.sort((a, b) => b.score - a.score).findIndex(p => p.name === nickname) + 1;
-    const myScore = session.participants.find(p => p.name === nickname)?.score || 0;
-
-    return (
-        <div className="max-w-2xl mx-auto text-center">
-            <h1 className="text-4xl font-bold mb-4">Permainan Selesai!</h1>
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg mb-6">
-                <h2 className="text-2xl font-semibold">Peringkat Anda: <span className="text-indigo-500 font-bold">#{myRank}</span></h2>
-                <p className="text-xl">Skor Akhir: <span className="text-indigo-500 font-bold">{myScore}</span> poin</p>
-            </div>
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
-                <h2 className="text-2xl font-bold mb-4">Papan Peringkat Akhir</h2>
-                <ul className="space-y-3 text-left">
-                    {session.participants.sort((a, b) => b.score - a.score).map((p, index) => (
-                        <li key={p.id} className={`flex items-center justify-between p-3 rounded-lg ${p.name === nickname ? 'bg-green-100 dark:bg-green-900' : 'bg-gray-100 dark:bg-gray-700'}`}>
-                            <span className="font-bold text-lg">{index + 1}. {p.name}</span>
-                            <span className="font-semibold text-indigo-600 dark:text-indigo-400">{p.score} poin</span>
-                        </li>
-                    ))}
-                </ul>
-            </div>
-            <button onClick={() => navigate('home')} className="mt-8 bg-indigo-600 text-white py-3 px-8 rounded-lg hover:bg-indigo-700 transition">
-                Main Lagi
-            </button>
-        </div>
-    );
-}
